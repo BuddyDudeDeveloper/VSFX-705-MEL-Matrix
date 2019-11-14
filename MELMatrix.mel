@@ -1,0 +1,344 @@
+//The procedure used to create the composition of the matrix.
+global proc MELMatrix() {
+    
+    //Creates the core, rings and moons.
+   createPlanet();
+   
+   //Creates the field of stars that surround the planet.
+   createStarField();
+}
+
+//Creates the core, uses it as an instance to create the moons and also creates the rings that surround the core.
+proc createPlanet() {
+    
+    //This string stores the transform node of the core.
+    string $planetaryShape = createCore();
+    
+    //This creates the rings that surround the core.
+    createRings();
+    
+    //By instancing the core, moons are created.
+    createMoons($planetaryShape);
+}
+
+//Creates the field of stars that surround the planet.
+proc createStarField() {
+    
+    //This stores all the transform nodes of each star made.
+    string $stars[];
+    
+    //This is the starting distance of the field away from the planet.
+    float $xZDistanceFactor = 3.1;
+    
+    //This is the total number of stars created per field.
+    int $numberOfStars = 100;
+    
+    //This is the total number of bands.
+    int $numberOfBands = 5;
+    
+    //This keeps track of where each new star will be stored in the collection of stars.
+    int $index = 0;
+    
+    /*
+    For each field, create 100 stars.
+    
+    int $currentFieldCount: The current number of fields being generated.
+    */ 
+    for($currentFieldCount = 1; $currentFieldCount <= $numberOfBands; $currentFieldCount++) {
+    
+        /*
+        For the number of starts to be created, create a star.
+        
+        int $currentStarCount: The current number of stars created.
+        */
+        for($currentStarCount = 0; $currentStarCount < $numberOfStars; $currentStarCount++, $index++) {
+            
+            //Create and store the current star. If this is not the first star, instance the first one made.
+            string $star = ($index == 0) ? createStar() : createInstance($stars[0]);
+            
+            //Based on how far away the star is from the planet, calculate its position. 
+            vector $position = calculatePosition($index, $xZDistanceFactor + (.5 * $currentFieldCount), 10);
+            
+            //To make sure we are transforming the star that was last created, the selection list is cleared and the star is selected.
+            clearThenSelect($star);
+            
+            //Moves the star to its desired location.
+            move  ($position.x) ($position.y) ($position.z);
+            
+            //Stores the star in the group of stars
+            $stars[$index] = $star;
+        }
+    }
+    
+    //To help organize the outliner, all stars are grouped together and labeled.
+    group -name "Stars" $stars;
+}
+
+/*
+Creates an individual star.
+
+Returns the transform node of the created star.
+*/
+proc string createStar() {
+    
+    //Each star is a polygon sphere so the command is called to create that with a label and a small radius.
+    return create(`polySphere -name "Star" -radius (.01)`);
+}
+
+/*
+Creates all the moons that surround the planet.
+
+string $instancedShape: The shape that makes the core of the planet. It is instanced to create the moons.
+*/
+proc createMoons(string $instancedShape) {
+    
+    //This stores all the moons.
+    string $moons[];
+    
+    //Since the core is being instanced, each instance needs to be shrunk down to look more like a moon.
+    float $scale = .1;
+    
+    //This is the factor used to calculate the radius of each trig calculation in the calculatePosition() procedure.
+    float $xZDistanceFactor = 2.1;
+    
+    //This is the total number of moons to be created.
+    int $numberOfMoons = 10;
+    
+    /*
+    For each moon that needs to be created, create a moon.
+    
+    int $currentMoonIndex: The location in the collection of moons where the newly created moon will be stored.
+    */
+    for($currentMoonsIndex = 0; $currentMoonsIndex < $numberOfMoons; $currentMoonsIndex++) {
+        
+        //This creates and stores the transform node of the instanced core that will be the moon.
+        string $moon = createInstance($instancedShape);
+        
+        //The location of the moon in the scene is depends on its index.
+        vector $position = calculatePosition($currentMoonsIndex, $xZDistanceFactor, 1);
+        
+        //Using the position, the moon is given a unique rotation.
+        vector $rotation = calculateMoonRotation($position);
+        
+        //To make sure the correct moon is selected, the selection list is cleared then the moon is selected.
+        clearThenSelect($moon);
+        
+        //Apply all calculated transform data.
+        scale $scale $scale $scale;
+        rotate ($rotation.x) ($rotation.y) ($rotation.y);
+        move  ($position.x) ($position.y) ($position.z);
+        
+        //Store the moon in a group of moons to help organize the outliner.
+        $moons[$currentMoonsIndex] = $moon;
+    }
+    
+    //After all the moons are created, they are grouped together.
+    group -name "Moons" $moons;
+}
+
+/*
+Calculates a unique rotation for each moon based on where it is in space.
+
+vector $position: The location of the moon in the scene.
+
+Returns the rotation values in a vector.
+*/
+proc vector calculateMoonRotation(vector $position) {
+    
+    //This vector is located on the opposite side of the planet.
+    vector $oppositePosition = <<(($position.x) * -1), (($position.y) * -1), (($position.z) * -1)>>;
+    
+    //Each moon is given a unique rotation based on the angle between the moon and the vector on the opposite side of the planet.
+    float $angleBetween[] = `angleBetween -euler -vector1 ($position.x) ($position.y) ($position.z) -vector2 ($oppositePosition.x) ($oppositePosition.y) ($oppositePosition.z)`;
+    
+    //Returns that unique rotation as a vector.
+    return <<($angleBetween[0]), ($angleBetween[1]), ($angleBetween[2])>>;
+    
+}
+
+/*
+Calculates the location of each moon and star in the scene based on their location in space.
+
+int $index: The current location of the moon or star in their respective collections.
+float $xZDistanceFactor: The multiplier for the x and z position calculation. This should be bigger than the radius of the rings for best visual effect.
+float $yDistanceMultiplier: The multiplier for the y position calculation.
+
+Returns the positional values in a vector.
+*/
+proc vector calculatePosition(int $index, float $xZDistanceFactor, float $yDistanceMultiplier) {
+    
+    //To create more visual variation, the vertical location of each moon is factored based on its index.
+    float $yDistanceFactorDivisor = $index + 2;
+    
+    //This is a flag for whether the star or moon is stored at an even index. Used for visual variation.
+    int $isEven = ($index % 2 == 0);
+    
+    //If the star or moon is stored at an even index, it will go below the center of the planet on the y-axis. Otherwise, it will go above.
+    float $yDistanceFactor = (1/$yDistanceFactorDivisor) * ($isEven ? 1 : -1) * $yDistanceMultiplier;
+    
+    //Using trigonometric functions, the x and z locations are calcuated.
+    float $x = sin($index) * $xZDistanceFactor;
+    float $z = cos($index) * $xZDistanceFactor;
+    
+    //To give each object a unique vertical position, the hypotenuse is used.
+    float $y = hypot($x, $z) * $yDistanceFactor;
+    
+    //Return those calculated values as a vector.
+    return <<$x, $y, $z>>;
+}
+
+/*
+Creates the shape that makes the planet and moons.
+
+Returns the transform node of the planetary shape.
+*/
+proc string createCore() {
+
+    //Creates the polyplatonic solid that becomes the planet/moons.
+    string $core = createPolyPlatonicSolid(1.0);
+    
+    //For visual interest, the shape is beveled and smoothed.
+    polyBevel3 -fraction .75 -depth (-1) -segments 10;
+    smooth();
+    
+    //Return the transform node of the shape.
+    return $core;
+}
+
+//Creates the rings that surround the planet.
+proc createRings() {
+    
+    //The collection of rings.
+    string $rings[];
+    
+    //The maximum amount of rings produced.
+    int $maxNumberOfRings = 3;
+    
+    //The radius of the largest ring.
+    float $firstRingRadius = 2;
+    
+    //For each ring to be created, create a ring.
+    for($currentRingsIndex = 0; $currentRingsIndex < $maxNumberOfRings; $currentRingsIndex++) {
+    
+        //If this is the first ring being created, make a new one. Otherwise, create an instance of it.
+        string $ring = ($currentRingsIndex == 0) ? createRing($firstRingRadius) : createInstance($rings[0]);
+        
+        //To make each ring have a unique rotation, a special procedure is called that uses its index.
+        vector $rotationValues = setRotationValuesByCurrentIndex($currentRingsIndex);
+        
+        //Each ring created will be slightly smaller than the rest.
+        float $scale = (1 - (.1 * $currentRingsIndex));
+        
+        //To make sure the proper shape is being transformed, deselected everything else and then select the current ring.
+        clearThenSelect($ring);
+        
+        //Transform the shape based on the calculated data.
+        scale $scale $scale $scale;
+        rotate ($rotationValues.x) ($rotationValues.y) ($rotationValues.z);
+        
+        //To help organize the outliner, the ring is stored for grouping.
+        $rings[$currentRingsIndex] = $ring;
+    }
+    
+    //This groups all the rings together to help organize the outliner.
+    group -name "Rings" $rings;
+}
+
+/*
+Based on the index of the current ring, calculate a rotation for it.
+
+int $index: The current location of the ring in the collection of rings.
+
+Returns the rotation values as a vector.
+*/
+proc vector setRotationValuesByCurrentIndex(int $index) {
+    
+    //For visual interest, the half-angle rotation is flipped so the rings are not all rotated in the same direction.
+    int $flip = -1;
+    
+    //The default axis rotation is 45 degrees with the half-angle being -25 degrees.
+    float $angle = 45;
+    float $halfAngle = ($angle/2) * $flip;
+    
+    
+    //Based on the index, return the rotation on each axis as a vector.
+    switch($index) {
+        case 0:
+            return <<$halfAngle, 0, $halfAngle>>;
+        case 1:
+            return <<0, 0, $angle>>;
+        case 2:
+            return <<$angle, 0, 0>>;
+    }
+}
+
+/*
+Creates a single ring.
+
+float $radius: The distance from the planet to the outer edge of the ring.
+
+Returns the transform node of the ring.
+*/
+proc string createRing(float $radius) {
+
+    //Since each ring is a polytorus, one is created with the section radius being significantly smaller than the radius to make the rings thin.
+	string $ring = create(`polyTorus -name "Ring" -radius $radius -sectionRadius ($radius/100)`);
+ 
+    //Once the ring is created, this subdivides its surface to round it out.
+	smooth();
+ 
+    //Returns the transform node.
+	return $ring;
+}
+
+/*
+This creates the shape that is used as the basis for planetary objects.
+
+float $radius: The size of the shape.
+
+Returns the transform node of the shape.
+*/
+proc string createPolyPlatonicSolid(float $radius) {
+    return create(`polyPlatonicSolid -name "PlanetaryShape" -radius $radius`);
+}
+
+/*
+Creates an instance of any shape.
+
+string $instanceTransformNode: The transform node of the shape being instanced.
+
+Returns the transform node of the new shape.
+*/
+proc string createInstance(string $instanceTransformNode) {
+    string $instance[] = `instance $instanceTransformNode`;
+    return $instance[0];
+}
+
+/*
+A general-purpose procedure for running shape-generating commands.
+
+string $command[]: The MEL command used to create the shape.
+
+Returns the transform node of the created shape.
+*/
+proc string create(string $command[]) {
+    string $nodes[] = $command;
+    return $nodes[0];
+}
+
+/*
+A utility procedure used to give two subdivisions to any shape.
+*.
+proc smooth() {
+    polySmooth -divisions 2;
+}
+
+/*
+A utility procedure for clearing the selection list then selecting a specified shape.
+
+string $name: The name of the shape being selected.
+*/
+proc clearThenSelect(string $name) {
+    select -clear;
+    select $name;
+}
