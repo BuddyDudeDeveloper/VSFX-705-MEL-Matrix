@@ -328,7 +328,7 @@ proc string create(string $command[]) {
 
 /*
 A utility procedure used to give two subdivisions to any shape.
-*.
+*/
 proc smooth() {
     polySmooth -divisions 2;
 }
